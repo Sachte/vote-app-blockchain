@@ -1,47 +1,67 @@
-pragma solidity ^0.4.18;
-// We have to specify what version of compiler this code will compile with
+pragma solidity ^0.4.24;
+pragma experimental ABIEncoderV2;
 
-contract Voting {
-  /* mapping field below is equivalent to an associative array or hash.
-  The key of the mapping is candidate name stored as type bytes32 and value is
-  an unsigned integer to store the vote count
-  */
-  
-  mapping (bytes32 => uint8) public votesReceived;
-  
-  /* Solidity doesn't let you pass in an array of strings in the constructor (yet).
-  We will use an array of bytes32 instead to store the list of candidates
-  */
-  
-  bytes32[] public candidateList;
+import "https://github.com/OpenZeppelin/openzeppelin-solidity/contracts/ownership/Ownable.sol";
+import "./Party.sol";
 
-  /* This is the constructor which will be called once when you
-  deploy the contract to the blockchain. When we deploy the contract,
-  we will pass an array of candidates who will be contesting in the election
-  */
-  function Voting(bytes32[] candidateNames) public {
-    candidateList = candidateNames;
-  }
+contract Voting is Ownable, Party{
 
-  // This function returns the total votes a candidate has received so far
-  function totalVotesFor(bytes32 candidate) view public returns (uint8) {
-    require(validCandidate(candidate));
-    return votesReceived[candidate];
-  }
+    // all the parties up for voting
+    Party[] public list;
 
-  // This function increments the vote count for the specified candidate. This
-  // is equivalent to casting a vote
-  function voteForCandidate(bytes32 candidate) public {
-    require(validCandidate(candidate));
-    votesReceived[candidate] += 1;
-  }
+    uint256[] partyIds;
 
-  function validCandidate(bytes32 candidate) view public returns (bool) {
-    for(uint i = 0; i < candidateList.length; i++) {
-      if (candidateList[i] == candidate) {
-        return true;
-      }
+    mapping (uint256 => uint256) listToIndex;
+
+    modifier onlyOwner {
+        require(isOwner(), "Not Admin");
+        _;
     }
-    return false;
-  }
+    
+    event PartyAdded(uint indexed id, string[] names);
+
+    constructor () public payable {
+    }
+
+    //create a party function
+    function createParty(string[] names) public onlyOwner payable{
+
+        Party party = new Party(names);
+
+        uint id = list.push(party) - 1;
+        uint256 key = partyIds.push(id) - 1;
+        listToIndex[id] = key;
+
+        emit PartyAdded(id, names);
+    }
+
+    //get all the parties
+    function getParties() public payable returns(Party[]){
+        return list;
+    }
+
+    //vote for the party
+    function vote(uint256 _id) public {
+        Party name = Party(_id);
+        name.vote();
+    }
+
+    //get votes for a party
+    function votes(uint256 _id) public view onlyOwner returns(uint256){
+        Party name = Party(_id);
+        return name.getVotes();
+    }
+
+
+    //get names for a party
+    function getNames(uint256 _id) public view returns(string[]){
+        Party name = Party(_id);
+        return name.getNames();
+    }
+    
+    //get type for a party
+    function isSenator(uint256 _id) public view returns(bool){
+        Party name = Party(_id);
+        return name.isSenator();
+    }
 }
