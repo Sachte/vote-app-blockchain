@@ -16,36 +16,137 @@ import { default as contract } from 'truffle-contract'
  */
 
 import votingArtifacts from '../../build/contracts/Voting.json'
-
+var url;
+var MongoClient;
 var Voting = contract(votingArtifacts)
 console.log(Voting)
 let candidates = { 'Rama': 'candidate-1', 'Nick': 'candidate-2', 'Jose': 'candidate-3' }
 
-window.voteForCandidate = function (candidate) {
-  let candidateName = $('#candidate').val()
+var http = require('http');
+
+//create a server object:
+http.createServer(function (req, res) {
+  var obj = JSON.parse(req);
+  if(obj.type=='createParty')
+  {
+    window.createParty(obj.candidates);
+  }
+  if(obj.type=='vote')
+  {
+    window.vote(obj.partyID);
+  }
+  if(obj.type=='getParty')
+  {
+    var result = window.getParty(obj.partyID);
+    res.write(JSON.stringify(result));
+  }
+  if(obj.type=='getVotes')
+  {
+    var result = window.getVotes(obj.partyID);
+    res.write(JSON.stringify(result));
+  }
+  res.end(); //end the response
+}).listen(8080); //the server object listens on port 8080
+
+
+window.getVotes(partyID)
+{
+  MongoClient.connect(url, function(err, db) {
+    if (err) throw err;
+    var dbo = db.db("mydb");
+    var query = { _id: partyID};
+    dbo.collection("parties").find(query).toArray(function(err, result) {
+      if (err) throw err;
+      return result.votes;
+      db.close();
+    });
+  });
+}
+window.getParty(partyID)
+{
+  MongoClient.connect(url, function(err, db) {
+    if (err) throw err;
+    var dbo = db.db("mydb");
+    var query = { _id: partyID};
+    dbo.collection("parties").find(query).toArray(function(err, result) {
+      if (err) throw err;
+      return result.candidates;
+      db.close();
+    });
+  });
+}
+window.createParty = function (candidates) {
   try {
-    $('#msg').html('Vote has been submitted. The vote count will increment as soon as the vote is recorded on the blockchain. Please wait.')
-    $('#candidate').val('')
+    /* Voting.deployed() returns an instance of the contract. Every call
+     * in Truffle returns a promise which is why we have used then()
+     * everywhere we have a transaction call
+     */
+    Voting.deployed().then(function (contractInstance) {
+      contractInstance.createParty(partyID, { gas: 140000, from: web3.eth.accounts[0] }).then(function () {
+        MongoClient.connect(url, function(err, db) {
+          if (err) throw err;
+          var dbo = db.db("mydb");
+          var myobj = { candidates: candidates, votes: 0 };
+          dbo.collection("parties").insertOne(myobj, function(err, res) {
+            if (err) throw err;
+            console.log("1 document inserted");
+            db.close();
+          });
+        });
+      })
+    })
+    
+  } catch (err) {
+    console.log(err)
+  }
+}
+window.vote = function (partyID) {
+  try {
 
     /* Voting.deployed() returns an instance of the contract. Every call
      * in Truffle returns a promise which is why we have used then()
      * everywhere we have a transaction call
      */
     Voting.deployed().then(function (contractInstance) {
-      contractInstance.voteForCandidate(candidateName, { gas: 140000, from: web3.eth.accounts[0] }).then(function () {
-        let divId = candidates[candidateName]
-        return contractInstance.totalVotesFor.call(candidateName).then(function (v) {
-          $('#' + divId).html(v.toString())
-          $('#msg').html('')
-        })
+      contractInstance.vote(partyID, { gas: 140000, from: web3.eth.accounts[0] }).then(function () {
+        MongoClient.connect(url, function(err, db) {
+          if (err) throw err;
+          var dbo = db.db("mydb");
+          var myquery = { _id: partyID };
+
+          dbo.collection("parties").find(query).toArray(function(err, result) {
+            if (err) throw err;
+            var newvalues = { $set: {votes: result.votes+1 } };
+            dbo.collection("parties").updateOne(myquery, newvalues, function(err, res) {
+              if (err) throw err;
+              console.log("1 document updated");
+              db.close();
+            });
+          });
+          
+        });
       })
     })
+    
   } catch (err) {
     console.log(err)
   }
 }
 
 $(document).ready(function () {
+  MongoClient = require('mongodb').MongoClient;
+  url = "mongodb://localhost:27017/mydb";
+
+  MongoClient.connect(url, function(err, db) {
+    if (err) throw err;
+    var dbo = db.db("mydb");
+    dbo.createCollection("parties", function(err, res) {
+      if (err) throw err;
+      console.log("Collection created!");
+      db.close();
+    });
+    
+  });
   if (typeof web3 !== 'undefined') {
     console.warn('Using web3 detected from external source like Metamask')
     // Use Mist/MetaMask's provider
@@ -58,12 +159,5 @@ $(document).ready(function () {
 
   Voting.setProvider(web3.currentProvider)
   let candidateNames = Object.keys(candidates)
-  for (var i = 0; i < candidateNames.length; i++) {
-    let name = candidateNames[i]
-    Voting.deployed().then(function (contractInstance) {
-      contractInstance.totalVotesFor.call(name).then(function (v) {
-        $('#' + candidates[name]).html(v.toString())
-      })
-    })
-  }
+
 })
