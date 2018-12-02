@@ -1,0 +1,8 @@
+{
+    "id": "", // the Mongo Unique Identifier
+    "candidate1": "Test President", //the name of the first candidate
+    "candidate2": "Test Vice President", // the name of the second candidate
+    "voteCount" : 2, //the number of votes
+    "address" : "", // the contract address of the Party when deployed on the network,
+    "kind": "PVP" //options are PVP, SEN
+}
